@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Health Monitoring - Outbreak Map</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Custom CSS -->
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #2E7D32, #4CAF50);
+            color: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            font-size: 1.8rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 1rem;
+        }
+        
+        .controls {
+            background: white;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+        
+        .control-group label {
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: #666;
+        }
+        
+        .control-group select,
+        .control-group input {
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+        
+        .control-group select:focus,
+        .control-group input:focus {
+            outline: none;
+            border-color: #4CAF50;
+            box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+        }
+        
+        .map-container {
+            position: relative;
+            height: calc(100vh - 140px);
+            width: 100%;
+        }
+        
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+        
+        .legend {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: white;
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+            min-width: 200px;
+        }
+        
+        .legend h3 {
+            margin-bottom: 0.5rem;
+            font-size: 1rem;
+            color: #333;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.25rem;
+        }
+        
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+        
+        .legend-text {
+            font-size: 0.9rem;
+            color: #666;
+        }
+        
+        .info-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: white;
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+            max-width: 300px;
+        }
+        
+        .info-panel h3 {
+            margin-bottom: 0.5rem;
+            color: #333;
+        }
+        
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.25rem;
+            font-size: 0.9rem;
+        }
+        
+        .info-label {
+            color: #666;
+        }
+        
+        .info-value {
+            font-weight: 500;
+            color: #333;
+        }
+        
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1001;
+        }
+        
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4CAF50;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .popup-content {
+            min-width: 200px;
+        }
+        
+        .popup-title {
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+            color: #333;
+        }
+        
+        .popup-item {
+            margin-bottom: 0.25rem;
+            font-size: 0.9rem;
+        }
+        
+        .popup-label {
+            color: #666;
+            font-weight: 500;
+        }
+        
+        .popup-value {
+            color: #333;
+        }
+        
+        .risk-low { color: #4CAF50; }
+        .risk-medium { color: #FF9800; }
+        .risk-high { color: #F44336; }
+        
+        @media (max-width: 768px) {
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .control-group {
+                width: 100%;
+            }
+            
+            .info-panel {
+                position: relative;
+                top: auto;
+                left: auto;
+                margin: 1rem;
+                max-width: none;
+            }
+            
+            .legend {
+                position: relative;
+                bottom: auto;
+                right: auto;
+                margin: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Smart Health Monitoring</h1>
+        <p>Real-time Outbreak Risk Visualization</p>
+    </div>
+    
+    <div class="controls">
+        <div class="control-group">
+            <label for="timeRange">Time Range</label>
+            <select id="timeRange">
+                <option value="1h">Last Hour</option>
+                <option value="24h" selected>Last 24 Hours</option>
+                <option value="7d">Last 7 Days</option>
+                <option value="30d">Last 30 Days</option>
+            </select>
+        </div>
+        
+        <div class="control-group">
+            <label for="riskFilter">Risk Level</label>
+            <select id="riskFilter">
+                <option value="all">All Levels</option>
+                <option value="low">Low Risk</option>
+                <option value="medium">Medium Risk</option>
+                <option value="high">High Risk</option>
+            </select>
+        </div>
+        
+        <div class="control-group">
+            <label for="dataType">Data Type</label>
+            <select id="dataType">
+                <option value="alerts">Alerts</option>
+                <option value="sensors">Sensor Data</option>
+                <option value="reports">Health Reports</option>
+            </select>
+        </div>
+        
+        <div class="control-group">
+            <label for="autoRefresh">Auto Refresh</label>
+            <input type="checkbox" id="autoRefresh" checked>
+        </div>
+    </div>
+    
+    <div class="map-container">
+        <div id="map"></div>
+        
+        <div class="info-panel" id="infoPanel">
+            <h3>System Status</h3>
+            <div class="info-item">
+                <span class="info-label">Active Alerts:</span>
+                <span class="info-value" id="activeAlerts">-</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Sensors Online:</span>
+                <span class="info-value" id="sensorsOnline">-</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Reports Today:</span>
+                <span class="info-value" id="reportsToday">-</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Last Update:</span>
+                <span class="info-value" id="lastUpdate">-</span>
+            </div>
+        </div>
+        
+        <div class="legend">
+            <h3>Risk Levels</h3>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #4CAF50;"></div>
+                <span class="legend-text">Low Risk</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #FF9800;"></div>
+                <span class="legend-text">Medium Risk</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #F44336;"></div>
+                <span class="legend-text">High Risk</span>
+            </div>
+        </div>
+        
+        <div class="loading" id="loading" style="display: none;">
+            <div class="spinner"></div>
+            <div>Loading data...</div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Custom JavaScript -->
+    <script>
+        class OutbreakMap {
+            constructor() {
+                this.map = null;
+                this.markers = [];
+                this.circles = [];
+                this.heatmapData = [];
+                this.autoRefreshInterval = null;
+                this.isLoading = false;
+                
+                this.init();
+            }
+            
+            init() {
+                this.initMap();
+                this.bindEvents();
+                this.loadData();
+                this.startAutoRefresh();
+            }
+            
+            initMap() {
+                // Initialize map centered on a default location
+                this.map = L.map('map').setView([40.7128, -74.0060], 10);
+                
+                // Add OpenStreetMap tiles
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(this.map);
+                
+                // Add custom markers for different risk levels
+                this.createCustomMarkers();
+            }
+            
+            createCustomMarkers() {
+                // Create custom icons for different risk levels
+                this.icons = {
+                    low: L.divIcon({
+                        className: 'custom-marker low-risk',
+                        html: '<div style="background-color: #4CAF50; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>',
+                        iconSize: [20, 20],
+                        iconAnchor: [10, 10]
+                    }),
+                    medium: L.divIcon({
+                        className: 'custom-marker medium-risk',
+                        html: '<div style="background-color: #FF9800; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>',
+                        iconSize: [20, 20],
+                        iconAnchor: [10, 10]
+                    }),
+                    high: L.divIcon({
+                        className: 'custom-marker high-risk',
+                        html: '<div style="background-color: #F44336; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>',
+                        iconSize: [20, 20],
+                        iconAnchor: [10, 10]
+                    })
+                };
+            }
+            
+            bindEvents() {
+                // Bind control events
+                document.getElementById('timeRange').addEventListener('change', () => this.loadData());
+                document.getElementById('riskFilter').addEventListener('change', () => this.filterMarkers());
+                document.getElementById('dataType').addEventListener('change', () => this.loadData());
+                document.getElementById('autoRefresh').addEventListener('change', (e) => {
+                    if (e.target.checked) {
+                        this.startAutoRefresh();
+                    } else {
+                        this.stopAutoRefresh();
+                    }
+                });
+            }
+            
+            async loadData() {
+                if (this.isLoading) return;
+                
+                this.isLoading = true;
+                this.showLoading(true);
+                
+                try {
+                    const timeRange = document.getElementById('timeRange').value;
+                    const dataType = document.getElementById('dataType').value;
+                    
+                    // Clear existing markers
+                    this.clearMarkers();
+                    
+                    // Fetch data from API
+                    const data = await this.fetchData(timeRange, dataType);
+                    
+                    // Process and display data
+                    this.processData(data);
+                    
+                    // Update info panel
+                    this.updateInfoPanel(data);
+                    
+                } catch (error) {
+                    console.error('Error loading data:', error);
+                    this.showError('Failed to load data. Please try again.');
+                } finally {
+                    this.isLoading = false;
+                    this.showLoading(false);
+                }
+            }
+            
+            async fetchData(timeRange, dataType) {
+                const baseUrl = 'http://localhost:3000/api';
+                const timeRangeMap = {
+                    '1h': '1 hour',
+                    '24h': '24 hours',
+                    '7d': '7 days',
+                    '30d': '30 days'
+                };
+                
+                let endpoint = '';
+                switch (dataType) {
+                    case 'alerts':
+                        endpoint = `${baseUrl}/alerts?timeRange=${timeRangeMap[timeRange]}`;
+                        break;
+                    case 'sensors':
+                        endpoint = `${baseUrl}/sensors/data?timeRange=${timeRangeMap[timeRange]}`;
+                        break;
+                    case 'reports':
+                        endpoint = `${baseUrl}/health-reports?timeRange=${timeRangeMap[timeRange]}`;
+                        break;
+                }
+                
+                const response = await fetch(endpoint);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                return await response.json();
+            }
+            
+            processData(data) {
+                if (!data.data || !Array.isArray(data.data)) {
+                    console.warn('No data received or invalid format');
+                    return;
+                }
+                
+                data.data.forEach(item => {
+                    if (item.location && item.location.latitude && item.location.longitude) {
+                        this.addMarker(item);
+                    }
+                });
+                
+                // Create heatmap if there's enough data
+                if (data.data.length > 10) {
+                    this.createHeatmap(data.data);
+                }
+            }
+            
+            addMarker(item) {
+                const lat = item.location.latitude;
+                const lng = item.location.longitude;
+                const riskLevel = item.risk_level || 'low';
+                
+                // Create popup content
+                const popupContent = this.createPopupContent(item);
+                
+                // Add marker
+                const marker = L.marker([lat, lng], {
+                    icon: this.icons[riskLevel] || this.icons.low
+                }).addTo(this.map);
+                
+                marker.bindPopup(popupContent);
+                
+                // Store marker for filtering
+                marker.riskLevel = riskLevel;
+                marker.dataType = this.getDataType(item);
+                
+                this.markers.push(marker);
+            }
+            
+            createPopupContent(item) {
+                let content = '<div class="popup-content">';
+                content += `<div class="popup-title">${this.getTitle(item)}</div>`;
+                
+                if (item.risk_level) {
+                    content += `<div class="popup-item">`;
+                    content += `<span class="popup-label">Risk Level:</span> `;
+                    content += `<span class="popup-value risk-${item.risk_level}">${item.risk_level.toUpperCase()}</span>`;
+                    content += `</div>`;
+                }
+                
+                if (item.confidence) {
+                    content += `<div class="popup-item">`;
+                    content += `<span class="popup-label">Confidence:</span> `;
+                    content += `<span class="popup-value">${Math.round(item.confidence * 100)}%</span>`;
+                    content += `</div>`;
+                }
+                
+                if (item.timestamp) {
+                    content += `<div class="popup-item">`;
+                    content += `<span class="popup-label">Time:</span> `;
+                    content += `<span class="popup-value">${new Date(item.timestamp).toLocaleString()}</span>`;
+                    content += `</div>`;
+                }
+                
+                if (item.sensors) {
+                    content += `<div class="popup-item">`;
+                    content += `<span class="popup-label">pH:</span> `;
+                    content += `<span class="popup-value">${item.sensors.pH || 'N/A'}</span>`;
+                    content += `</div>`;
+                }
+                
+                if (item.symptoms && Array.isArray(item.symptoms)) {
+                    content += `<div class="popup-item">`;
+                    content += `<span class="popup-label">Symptoms:</span> `;
+                    content += `<span class="popup-value">${item.symptoms.join(', ')}</span>`;
+                    content += `</div>`;
+                }
+                
+                content += '</div>';
+                return content;
+            }
+            
+            getTitle(item) {
+                if (item.type === 'outbreak_prediction') {
+                    return 'Outbreak Alert';
+                } else if (item.sensors) {
+                    return 'Sensor Reading';
+                } else if (item.symptoms) {
+                    return 'Health Report';
+                }
+                return 'Data Point';
+            }
+            
+            getDataType(item) {
+                if (item.type === 'outbreak_prediction') {
+                    return 'alerts';
+                } else if (item.sensors) {
+                    return 'sensors';
+                } else if (item.symptoms) {
+                    return 'reports';
+                }
+                return 'unknown';
+            }
+            
+            createHeatmap(data) {
+                // Simple heatmap implementation
+                const heatmapData = data
+                    .filter(item => item.location && item.location.latitude && item.location.longitude)
+                    .map(item => [item.location.latitude, item.location.longitude, 1]);
+                
+                if (heatmapData.length > 0) {
+                    // Create heatmap layer (simplified version)
+                    this.heatmapData = heatmapData;
+                }
+            }
+            
+            filterMarkers() {
+                const riskFilter = document.getElementById('riskFilter').value;
+                const dataType = document.getElementById('dataType').value;
+                
+                this.markers.forEach(marker => {
+                    const show = (riskFilter === 'all' || marker.riskLevel === riskFilter) &&
+                                (dataType === 'all' || marker.dataType === dataType);
+                    
+                    if (show) {
+                        marker.addTo(this.map);
+                    } else {
+                        marker.remove();
+                    }
+                });
+            }
+            
+            clearMarkers() {
+                this.markers.forEach(marker => {
+                    this.map.removeLayer(marker);
+                });
+                this.markers = [];
+                
+                this.circles.forEach(circle => {
+                    this.map.removeLayer(circle);
+                });
+                this.circles = [];
+            }
+            
+            updateInfoPanel(data) {
+                const stats = this.calculateStats(data.data);
+                
+                document.getElementById('activeAlerts').textContent = stats.alerts;
+                document.getElementById('sensorsOnline').textContent = stats.sensors;
+                document.getElementById('reportsToday').textContent = stats.reports;
+                document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+            }
+            
+            calculateStats(data) {
+                const stats = {
+                    alerts: 0,
+                    sensors: 0,
+                    reports: 0
+                };
+                
+                data.forEach(item => {
+                    if (item.type === 'outbreak_prediction') {
+                        stats.alerts++;
+                    } else if (item.sensors) {
+                        stats.sensors++;
+                    } else if (item.symptoms) {
+                        stats.reports++;
+                    }
+                });
+                
+                return stats;
+            }
+            
+            startAutoRefresh() {
+                if (this.autoRefreshInterval) {
+                    clearInterval(this.autoRefreshInterval);
+                }
+                
+                this.autoRefreshInterval = setInterval(() => {
+                    if (!this.isLoading) {
+                        this.loadData();
+                    }
+                }, 30000); // Refresh every 30 seconds
+            }
+            
+            stopAutoRefresh() {
+                if (this.autoRefreshInterval) {
+                    clearInterval(this.autoRefreshInterval);
+                    this.autoRefreshInterval = null;
+                }
+            }
+            
+            showLoading(show) {
+                document.getElementById('loading').style.display = show ? 'block' : 'none';
+            }
+            
+            showError(message) {
+                // Simple error display
+                alert(message);
+            }
+        }
+        
+        // Initialize the map when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new OutbreakMap();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,220 @@
+groups:
+  - name: health_monitoring_alerts
+    rules:
+      # High CPU usage
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is above 80% for more than 5 minutes on {{ $labels.instance }}"
+
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is above 85% for more than 5 minutes on {{ $labels.instance }}"
+
+      # Disk space low
+      - alert: LowDiskSpace
+        expr: (1 - (node_filesystem_avail_bytes / node_filesystem_size_bytes)) * 100 > 90
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Low disk space"
+          description: "Disk space is above 90% on {{ $labels.instance }} mount {{ $labels.mountpoint }}"
+
+      # Service down
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service is down"
+          description: "{{ $labels.job }} service is down on {{ $labels.instance }}"
+
+      # High response time
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High response time"
+          description: "95th percentile response time is above 2 seconds for {{ $labels.job }}"
+
+      # High error rate
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate"
+          description: "Error rate is above 5% for {{ $labels.job }}"
+
+  - name: outbreak_monitoring_alerts
+    rules:
+      # High outbreak risk detected
+      - alert: HighOutbreakRisk
+        expr: outbreak_risk_level{level="high"} == 1
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High outbreak risk detected"
+          description: "Outbreak prediction indicates HIGH risk level with {{ $value }}% confidence"
+
+      # Medium outbreak risk detected
+      - alert: MediumOutbreakRisk
+        expr: outbreak_risk_level{level="medium"} == 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Medium outbreak risk detected"
+          description: "Outbreak prediction indicates MEDIUM risk level with {{ $value }}% confidence"
+
+      # Sensor data anomaly
+      - alert: SensorDataAnomaly
+        expr: water_quality_anomaly_score > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Sensor data anomaly detected"
+          description: "Water quality sensor {{ $labels.device_id }} has detected anomalous readings"
+
+      # Sensor offline
+      - alert: SensorOffline
+        expr: time() - sensor_last_seen_timestamp > 300
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Sensor is offline"
+          description: "Sensor {{ $labels.device_id }} has not reported data for more than 5 minutes"
+
+      # High symptom reports
+      - alert: HighSymptomReports
+        expr: rate(health_reports_total[1h]) > 10
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High symptom report rate"
+          description: "Symptom report rate is above 10 reports per hour"
+
+      # AI model prediction failure
+      - alert: AIModelFailure
+        expr: rate(ai_prediction_errors_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "AI model prediction failure"
+          description: "AI model is experiencing high error rate: {{ $value }} errors per second"
+
+  - name: notification_alerts
+    rules:
+      # SMS delivery failure
+      - alert: SMSDeliveryFailure
+        expr: rate(sms_delivery_failures_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SMS delivery failure rate high"
+          description: "SMS delivery failure rate is above 5%: {{ $value }} failures per second"
+
+      # Push notification failure
+      - alert: PushNotificationFailure
+        expr: rate(push_notification_failures_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Push notification failure rate high"
+          description: "Push notification failure rate is above 10%: {{ $value }} failures per second"
+
+      # Notification queue backlog
+      - alert: NotificationQueueBacklog
+        expr: notification_queue_size > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Notification queue backlog"
+          description: "Notification queue has {{ $value }} pending messages"
+
+  - name: database_alerts
+    rules:
+      # Database connection failure
+      - alert: DatabaseConnectionFailure
+        expr: up{job="postgres-exporter"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Database connection failed"
+          description: "Cannot connect to PostgreSQL database"
+
+      # High database connections
+      - alert: HighDatabaseConnections
+        expr: pg_stat_database_numbackends / pg_settings_max_connections * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High database connection usage"
+          description: "Database connection usage is above 80%: {{ $value }}%"
+
+      # Slow database queries
+      - alert: SlowDatabaseQueries
+        expr: rate(pg_stat_database_tup_returned[5m]) / rate(pg_stat_database_tup_fetched[5m]) < 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow database queries detected"
+          description: "Database query efficiency is below 10% on {{ $labels.datname }}"
+
+  - name: workflow_alerts
+    rules:
+      # n8n workflow execution failure
+      - alert: WorkflowExecutionFailure
+        expr: rate(n8n_workflow_execution_errors_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Workflow execution failure rate high"
+          description: "n8n workflow execution failure rate is above 10%: {{ $value }} failures per second"
+
+      # Workflow execution timeout
+      - alert: WorkflowExecutionTimeout
+        expr: n8n_workflow_execution_duration_seconds > 300
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Workflow execution timeout"
+          description: "Workflow {{ $labels.workflow_name }} execution time is above 5 minutes"
+
+      # Workflow queue backlog
+      - alert: WorkflowQueueBacklog
+        expr: n8n_workflow_queue_size > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Workflow queue backlog"
+          description: "n8n workflow queue has {{ $value }} pending executions"

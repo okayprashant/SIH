@@ -1,0 +1,611 @@
+{
+  "name": "Outbreak Prediction Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Cron Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://backend:3000/api/sensors/data",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxRetries": 3
+          }
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth"
+      },
+      "id": "fetch-sensor-data",
+      "name": "Fetch Sensor Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        460,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "backend-api-key",
+          "name": "Backend API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "http://backend:3000/api/health-reports",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxRetries": 3
+          }
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth"
+      },
+      "id": "fetch-health-reports",
+      "name": "Fetch Health Reports",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        460,
+        480
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "backend-api-key",
+          "name": "Backend API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "sensor-data-exists",
+              "leftValue": "={{ $json.data && $json.data.length > 0 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-sensor-data",
+      "name": "Check Sensor Data",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "health-reports-exist",
+              "leftValue": "={{ $json.data && $json.data.length > 0 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-health-reports",
+      "name": "Check Health Reports",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        680,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare data for AI prediction\nconst sensorData = $input.first().json.data || [];\nconst healthReports = $input.last().json.data || [];\n\n// Process sensor data\nconst processedSensorData = sensorData.map(sensor => ({\n  device_id: sensor.deviceId,\n  timestamp: sensor.timestamp,\n  ph: sensor.sensors?.pH || 7.0,\n  turbidity: sensor.sensors?.turbidity || 0,\n  temperature: sensor.sensors?.temperature || 25.0,\n  tds: sensor.sensors?.tds || 0,\n  latitude: sensor.location?.latitude || null,\n  longitude: sensor.location?.longitude || null\n}));\n\n// Process health reports\nconst processedHealthReports = healthReports.map(report => ({\n  user_id: report.userId,\n  timestamp: report.timestamp,\n  symptoms: report.symptoms || [],\n  severity: report.severity || 1,\n  onset_date: report.onsetDate,\n  location: report.location || null,\n  additional_notes: report.additionalNotes || null\n}));\n\n// Calculate location center if available\nlet location = null;\nif (processedSensorData.length > 0 && processedSensorData[0].latitude) {\n  const lats = processedSensorData.map(s => s.latitude).filter(lat => lat !== null);\n  const lons = processedSensorData.map(s => s.longitude).filter(lon => lon !== null);\n  \n  if (lats.length > 0 && lons.length > 0) {\n    location = {\n      latitude: lats.reduce((a, b) => a + b, 0) / lats.length,\n      longitude: lons.reduce((a, b) => a + b, 0) / lons.length\n    };\n  }\n}\n\n// Prepare prediction request\nconst predictionRequest = {\n  sensor_data: processedSensorData,\n  health_reports: processedHealthReports,\n  location: location,\n  time_range: {\n    start: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // Last 24 hours\n    end: new Date().toISOString()\n  }\n};\n\nreturn {\n  json: predictionRequest\n};"
+      },
+      "id": "prepare-ai-data",
+      "name": "Prepare AI Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        390
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://ai-service:8000/predict/outbreak",
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {
+          "timeout": 60000,
+          "retry": {
+            "enabled": true,
+            "maxRetries": 3
+          }
+        }
+      },
+      "id": "call-ai-prediction",
+      "name": "Call AI Prediction",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        390
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "risk-level-medium-or-high",
+              "leftValue": "={{ $json.risk_level }}",
+              "rightValue": "medium",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "check-risk-level",
+      "name": "Check Risk Level",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        390
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://backend:3000/api/alerts",
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={\n  \"type\": \"outbreak_prediction\",\n  \"risk_level\": \"{{ $json.risk_level }}\",\n  \"confidence\": {{ $json.confidence }},\n  \"probability_scores\": {{ JSON.stringify($json.probability_scores) }},\n  \"contributing_factors\": {{ JSON.stringify($json.contributing_factors) }},\n  \"recommendations\": {{ JSON.stringify($json.recommendations) }},\n  \"location\": {{ JSON.stringify($json.location) }},\n  \"model_version\": \"{{ $json.model_version }}\",\n  \"prediction_timestamp\": \"{{ $json.timestamp }}\",\n  \"status\": \"active\"\n}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxRetries": 3
+          }
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth"
+      },
+      "id": "create-alert",
+      "name": "Create Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1560,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "backend-api-key",
+          "name": "Backend API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "risk-level-high",
+              "leftValue": "={{ $json.risk_level }}",
+              "rightValue": "high",
+              "operator": {
+                "type": "string",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-high-risk",
+      "name": "Check High Risk",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.twilio.com/2010-04-01/Accounts/{{ $credentials.twilio.accountSid }}/Messages.json",
+        "sendBody": true,
+        "bodyContentType": "form",
+        "formParameters": {
+          "parameters": [
+            {
+              "name": "From",
+              "value": "={{ $credentials.twilio.phoneNumber }}"
+            },
+            {
+              "name": "To",
+              "value": "={{ $node['Get Health Workers'].json.phone }}"
+            },
+            {
+              "name": "Body",
+              "value": "🚨 HIGH RISK ALERT 🚨\n\nOutbreak prediction indicates HIGH risk level with {{ Math.round($json.confidence * 100) }}% confidence.\n\nKey factors:\n{{ $json.contributing_factors.join('\\n') }}\n\nImmediate actions:\n{{ $json.recommendations.slice(0, 3).join('\\n') }}\n\nLocation: {{ $json.location ? $json.location.latitude + ',' + $json.location.longitude : 'Unknown' }}\n\nTime: {{ $json.prediction_timestamp }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxRetries": 3
+          }
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "twilioApi"
+      },
+      "id": "send-sms-alert",
+      "name": "Send SMS Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2000,
+        200
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "twilio-credentials",
+          "name": "Twilio API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "http://backend:3000/api/notifications/push",
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={\n  \"title\": \"Health Alert: {{ $json.risk_level.toUpperCase() }} Risk Detected\",\n  \"body\": \"Outbreak prediction shows {{ $json.risk_level }} risk with {{ Math.round($json.confidence * 100) }}% confidence. {{ $json.contributing_factors[0] }}\",\n  \"data\": {\n    \"type\": \"outbreak_alert\",\n    \"risk_level\": \"{{ $json.risk_level }}\",\n    \"confidence\": {{ $json.confidence }},\n    \"alert_id\": \"{{ $node['Create Alert'].json.id }}\"\n  },\n  \"topic\": \"health_alerts\",\n  \"priority\": \"{{ $json.risk_level === 'high' ? 'high' : 'normal' }}\"\n}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxRetries": 3
+          }
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth"
+      },
+      "id": "send-push-notification",
+      "name": "Send Push Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2000,
+        400
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "backend-api-key",
+          "name": "Backend API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "http://backend:3000/api/users",
+        "options": {
+          "qs": {
+            "role": "health_worker",
+            "status": "active"
+          },
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxRetries": 3
+          }
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth"
+      },
+      "id": "get-health-workers",
+      "name": "Get Health Workers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1780,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "backend-api-key",
+          "name": "Backend API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "http://grafana:3000/api/datasources/proxy/1/api/v1/query",
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={\n  \"query\": \"outbreak_risk_level{risk_level=\\\"{{ $json.risk_level }}\\\"}\",\n  \"time\": \"{{ Math.floor(Date.now() / 1000) }}\"\n}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxRetries": 3
+          }
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth"
+      },
+      "id": "update-grafana-dashboard",
+      "name": "Update Grafana Dashboard",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2000,
+        600
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "grafana-api-key",
+          "name": "Grafana API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log workflow execution\nconst logData = {\n  timestamp: new Date().toISOString(),\n  workflow: 'outbreak-prediction',\n  risk_level: $json.risk_level,\n  confidence: $json.confidence,\n  alert_created: $node['Create Alert'].json ? true : false,\n  notifications_sent: {\n    sms: $node['Send SMS Alert'].json ? true : false,\n    push: $node['Send Push Notification'].json ? true : false\n  },\n  execution_time: Date.now() - $node['Cron Trigger'].json.execution_time\n};\n\nconsole.log('Outbreak Prediction Workflow Completed:', JSON.stringify(logData, null, 2));\n\nreturn {\n  json: logData\n};"
+      },
+      "id": "log-execution",
+      "name": "Log Execution",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        390
+      ]
+    }
+  ],
+  "connections": {
+    "Cron Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Sensor Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Health Reports",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "Check Sensor Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Health Reports": {
+      "main": [
+        [
+          {
+            "node": "Check Health Reports",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "Prepare AI Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Health Reports": {
+      "main": [
+        [
+          {
+            "node": "Prepare AI Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Prepare AI Data": {
+      "main": [
+        [
+          {
+            "node": "Call AI Prediction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call AI Prediction": {
+      "main": [
+        [
+          {
+            "node": "Check Risk Level",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Risk Level": {
+      "main": [
+        [
+          {
+            "node": "Create Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Alert": {
+      "main": [
+        [
+          {
+            "node": "Check High Risk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check High Risk": {
+      "main": [
+        [
+          {
+            "node": "Get Health Workers",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Push Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Health Workers": {
+      "main": [
+        [
+          {
+            "node": "Send SMS Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS Alert": {
+      "main": [
+        [
+          {
+            "node": "Update Grafana Dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Push Notification": {
+      "main": [
+        [
+          {
+            "node": "Update Grafana Dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Grafana Dashboard": {
+      "main": [
+        [
+          {
+            "node": "Log Execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-15T10:00:00.000Z",
+      "updatedAt": "2024-01-15T10:00:00.000Z",
+      "id": "outbreak-prediction",
+      "name": "outbreak-prediction"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-15T10:00:00.000Z",
+  "versionId": "1"
+}

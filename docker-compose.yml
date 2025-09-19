@@ -1,0 +1,162 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: health_monitoring_db
+    environment:
+      POSTGRES_DB: health_monitoring
+      POSTGRES_USER: health_user
+      POSTGRES_PASSWORD: health_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - health_network
+
+  # Redis for caching and sessions
+  redis:
+    image: redis:7-alpine
+    container_name: health_monitoring_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - health_network
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: health_monitoring_backend
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://health_user:health_password@postgres:5432/health_monitoring
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: your-super-secret-jwt-key-change-in-production
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - health_network
+    volumes:
+      - ./backend/logs:/app/logs
+
+  # AI/ML Service
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: health_monitoring_ai
+    environment:
+      MODEL_PATH: /app/models/outbreak_model.pkl
+      API_PORT: 8000
+      BACKEND_URL: http://backend:3000
+    ports:
+      - "8000:8000"
+    depends_on:
+      - backend
+    networks:
+      - health_network
+    volumes:
+      - ./ai-service/models:/app/models
+
+  # n8n Workflow Automation
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: health_monitoring_n8n
+    environment:
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: admin
+      N8N_BASIC_AUTH_PASSWORD: admin123
+      N8N_HOST: localhost
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: http://localhost:5678
+      GENERIC_TIMEZONE: UTC
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: health_monitoring
+      DB_POSTGRESDB_USER: health_user
+      DB_POSTGRESDB_PASSWORD: health_password
+    ports:
+      - "5678:5678"
+    depends_on:
+      - postgres
+    networks:
+      - health_network
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n-workflows:/home/node/.n8n/workflows
+
+  # Grafana Dashboard
+  grafana:
+    image: grafana/grafana:latest
+    container_name: health_monitoring_grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_INSTALL_PLUGINS: grafana-worldmap-panel,grafana-piechart-panel
+    ports:
+      - "3001:3000"
+    depends_on:
+      - postgres
+    networks:
+      - health_network
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./dashboard/grafana/provisioning:/etc/grafana/provisioning
+      - ./dashboard/grafana/dashboards:/var/lib/grafana/dashboards
+
+  # Prometheus Monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: health_monitoring_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - health_network
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: health_monitoring_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deployment/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./deployment/nginx/ssl:/etc/nginx/ssl
+    depends_on:
+      - backend
+      - ai-service
+      - grafana
+      - n8n
+    networks:
+      - health_network
+
+volumes:
+  postgres_data:
+  n8n_data:
+  grafana_data:
+  prometheus_data:
+
+networks:
+  health_network:
+    driver: bridge
