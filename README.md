@@ -1,8 +1,8 @@
-# Smart Health Monitoring & Outbreak Prediction Platform
+# Smart Health Monitoring & Outbreak Prediction Platform (Arogya)
 
 A comprehensive IoT-based system for monitoring water quality, collecting health symptoms, and predicting disease outbreaks using AI/ML.
 
-## 🏗 System Architecture
+##  System Architecture
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
@@ -42,7 +42,7 @@ A comprehensive IoT-based system for monitoring water quality, collecting health
 └───────────────────┘    └───────────────────┘    └───────────────────┘
 ```
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 smart-health-platform/
@@ -86,7 +86,7 @@ smart-health-platform/
     └── architecture/
 ```
 
-## 🚀 Quick Start
+##  Quick Start
 
 ### Prerequisites
 - Node.js 18+
@@ -116,7 +116,7 @@ docker-compose up -d
 - n8n: http://localhost:5678
 - Grafana: http://localhost:3002
 
-## 📋 Module Overview
+##  Module Overview
 
 ### 1. IoT Sensors (`/iot-sensors`)
 - ESP32/Arduino code for water quality monitoring
@@ -168,7 +168,7 @@ docker-compose up -d
 - Error logging with Sentry
 - Performance monitoring
 
-## 🔧 Configuration
+## Configuration
 
 ### Environment Variables
 Create `.env` files in each module directory:
@@ -189,7 +189,7 @@ FIREBASE_API_KEY=your-firebase-key
 TWILIO_ACCOUNT_SID=your-twilio-sid
 ```
 
-## 📊 Data Flow
+## Data Flow
 
 1. **Data Collection**: IoT sensors collect water quality data
 2. **Mobile Reporting**: Citizens report health symptoms via mobile app
@@ -199,7 +199,7 @@ TWILIO_ACCOUNT_SID=your-twilio-sid
 6. **Notifications**: Alerts sent via SMS and push notifications
 7. **Visualization**: Dashboard displays real-time data and trends
 
-## 🧪 Testing
+## Testing
 
 Each module includes comprehensive tests:
 - Unit tests for individual components
@@ -207,7 +207,7 @@ Each module includes comprehensive tests:
 - End-to-end tests for complete workflows
 - Load testing for performance validation
 
-## 📈 Deployment
+## Deployment
 
 ### Development
 ```bash
@@ -225,7 +225,7 @@ docker-compose -f docker-compose.prod.yml up -d
 - **Railway**: n8n workflows
 - **Fly.io**: Mobile app backend
 
-## 🤝 Contributing
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch
@@ -233,11 +233,11 @@ docker-compose -f docker-compose.prod.yml up -d
 4. Add tests
 5. Submit a pull request
 
-## 📄 License
+## License
 
 MIT License - see LICENSE file for details
 
-## 🆘 Support
+## Support
 
 For issues and questions:
 - Create an issue in the repository
@@ -246,4 +246,4 @@ For issues and questions:
 
 ---
 
-**Built with ❤️ for public health monitoring and outbreak prevention**
+**Built with ❤️ for public health monitoring and outbreak prevention (Arogya)**
